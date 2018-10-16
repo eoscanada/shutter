@@ -1,8 +1,8 @@
-package shutdown
+package shutter
 
 import "sync"
 
-type Shutdown struct {
+type Shutter struct {
 	lock sync.Mutex
 	ch   chan struct{}
 	err  error
@@ -10,18 +10,18 @@ type Shutdown struct {
 	call func()
 }
 
-func New(f func()) *Shutdown {
-	return &Shutdown{
+func New(f func()) *Shutter {
+	return &Shutter{
 		ch:   make(chan struct{}),
 		call: f,
 	}
 }
 
-func (s *Shutdown) Done() chan struct{} {
+func (s *Shutter) Done() chan struct{} {
 	return s.ch
 }
 
-func (s *Shutdown) Shut(err error) {
+func (s *Shutter) Shutdown(err error) {
 	s.once.Do(func() {
 		s.lock.Lock()
 
@@ -36,7 +36,7 @@ func (s *Shutdown) Shut(err error) {
 	})
 }
 
-func (s *Shutdown) Down() bool {
+func (s *Shutter) IsDown() bool {
 	select {
 	case <-s.ch:
 		return true
@@ -45,7 +45,7 @@ func (s *Shutdown) Down() bool {
 	}
 }
 
-func (s *Shutdown) Err() error {
+func (s *Shutter) Err() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
