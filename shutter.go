@@ -17,7 +17,7 @@ func New(f func()) *Shutter {
 	}
 }
 
-func (s *Shutter) Done() chan struct{} {
+func (s *Shutter) Done() <-chan struct{} {
 	return s.ch
 }
 
