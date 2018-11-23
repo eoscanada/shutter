@@ -50,6 +50,10 @@ func (s *Shutter) IsDown() bool {
 	}
 }
 
+func (s *Shutter) SetCallback(f func()) {
+	s.call = f
+}
+
 func (s *Shutter) Err() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
