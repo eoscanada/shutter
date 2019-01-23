@@ -54,6 +54,12 @@ func (s *Shutter) SetCallback(f func()) {
 	s.call = f
 }
 
+func (s *Shutter) SetErrorCallback(f func(error)) {
+	s.call = func() {
+		f(s.Err())
+	}
+}
+
 func (s *Shutter) Err() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
