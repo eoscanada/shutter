@@ -3,19 +3,27 @@ package shutter
 import "sync"
 
 type Shutter struct {
-	lock sync.Mutex // shutdown lock
-	ch    chan struct{}
-	err   error
-	once  sync.Once
-	calls []func(error)
+	lock     sync.Mutex // shutdown lock
+	ch       chan struct{}
+	err      error
+	once     sync.Once
+	calls    []func(error)
 	callLock sync.Mutex
 }
 
-func New(f func()) *Shutter {
+func New() *Shutter {
 	s := &Shutter{
 		ch: make(chan struct{}),
 	}
-	s.SetCallback(f)
+	return s
+}
+
+func NewWithCallback(f func(error)) *Shutter {
+	s := &Shutter{
+		ch: make(chan struct{}),
+	}
+	s.OnShutdown(f)
+	return s
 }
 
 func (s *Shutter) Shutdown(err error) {
@@ -59,24 +67,8 @@ func (s *Shutter) IsDown() bool {
 // `Shutdown()`. These calls will be blocking. It is unsafe to
 // register new callbacks in multiple go-routines.
 func (s *Shutter) OnShutdown(f func(error)) {
+	s.callLock.Lock()
 	s.calls = append(s.calls, f)
-}
-
-// Deprecated: use `OnShutdown` to register a callback instead.
-func (s *Shutter) SetCallback(f func()) {
-	s.callLock.Lock()
-	s.calls = []func(error){
-		func(_ error) {
-			f()
-		},
-	}
-	s.callLock.Unlock()
-}
-
-// Deprecated: use `OnShutdown` to register an error callback instead.
-func (s *Shutter) SetErrorCallback(f func(error)) {
-	s.callLock.Lock()
-	s.calls = []func(error){f}
 	s.callLock.Unlock()
 }
 
