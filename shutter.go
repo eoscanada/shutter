@@ -1,6 +1,9 @@
 package shutter
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 type Shutter struct {
 	lock     sync.Mutex // shutdown lock
@@ -24,6 +27,25 @@ func NewWithCallback(f func(error)) *Shutter {
 	}
 	s.OnShutdown(f)
 	return s
+}
+
+var ErrShutterWasAlreadyDown = errors.New("saferun was called on an already-shutdown shutter")
+
+// SafeRun allows you to run a function only if the shutter is not down yet,
+// with the assurance that the it will not run its callback functions
+// during the execution of your function.
+//
+// This is useful to prevent race conditions, where the func given to "SafeRun"
+// should increase a counter and the func given to OnShutdown should decrease it.
+//
+// WARNING: never call Shutdown from within your SafeRun function, it will deadlock.
+func (s *Shutter) SafeRun(fn func() error) (err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.IsDown() {
+		return ErrShutterWasAlreadyDown
+	}
+	return fn()
 }
 
 func (s *Shutter) Shutdown(err error) {

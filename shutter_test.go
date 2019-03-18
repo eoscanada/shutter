@@ -3,6 +3,7 @@ package shutter
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -32,4 +33,70 @@ func TestMultiCallbacks(t *testing.T) {
 	})
 	s.Shutdown(nil)
 	assert.Equal(t, 2, a)
+}
+
+func TestSafeRunAlreadyShutdown(t *testing.T) {
+	s := New()
+	a := 0
+	s.OnShutdown(func(_ error) {
+		a--
+	})
+	s.Shutdown(nil)
+	err := s.SafeRun(func() error {
+		a++
+		return nil
+	})
+
+	assert.Equal(t, -1, a)
+	assert.Equal(t, ErrShutterWasAlreadyDown, err)
+}
+
+func TestSafeRunNotShutdown(t *testing.T) {
+	s := New()
+	a := 0
+	s.OnShutdown(func(_ error) {
+		a--
+	})
+	err := s.SafeRun(func() error {
+		a++
+		return nil
+	})
+	assert.NoError(t, err)
+	s.Shutdown(nil)
+	assert.Equal(t, 0, a)
+}
+
+func TestShutdownDuringSafeRun(t *testing.T) {
+	s := New()
+
+	a := 0
+	s.OnShutdown(func(_ error) {
+		a--
+	})
+
+	var err error
+	inSafeRunCh := make(chan interface{})
+	shutdownCalled := make(chan interface{})
+
+	go func() {
+		err = s.SafeRun(func() error {
+			close(inSafeRunCh)
+			select {
+			case <-shutdownCalled:
+				t.Errorf("Shutdown was called and completed while in SafeRun")
+			case <-time.After(50 * time.Millisecond):
+				return nil
+			}
+			return nil
+		})
+	}()
+
+	<-inSafeRunCh
+	go func() {
+		s.Shutdown(nil)
+		close(shutdownCalled)
+	}()
+	assert.NoError(t, err)
+	<-shutdownCalled
+	assert.Equal(t, -1, a)
 }
