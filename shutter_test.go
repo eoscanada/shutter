@@ -35,14 +35,14 @@ func TestMultiCallbacks(t *testing.T) {
 	assert.Equal(t, 2, a)
 }
 
-func TestSafeRunAlreadyShutdown(t *testing.T) {
+func TestLockedInitAlreadyShutdown(t *testing.T) {
 	s := New()
 	a := 0
 	s.OnShutdown(func(_ error) {
 		a--
 	})
 	s.Shutdown(nil)
-	err := s.SafeRun(func() error {
+	err := s.LockedInit(func() error {
 		a++
 		return nil
 	})
@@ -51,13 +51,13 @@ func TestSafeRunAlreadyShutdown(t *testing.T) {
 	assert.Equal(t, ErrShutterWasAlreadyDown, err)
 }
 
-func TestSafeRunNotShutdown(t *testing.T) {
+func TestLockedInitNotShutdown(t *testing.T) {
 	s := New()
 	a := 0
 	s.OnShutdown(func(_ error) {
 		a--
 	})
-	err := s.SafeRun(func() error {
+	err := s.LockedInit(func() error {
 		a++
 		return nil
 	})
@@ -66,7 +66,7 @@ func TestSafeRunNotShutdown(t *testing.T) {
 	assert.Equal(t, 0, a)
 }
 
-func TestShutdownDuringSafeRun(t *testing.T) {
+func TestShutdownDuringLockedInit(t *testing.T) {
 	s := New()
 
 	a := 0
@@ -75,15 +75,15 @@ func TestShutdownDuringSafeRun(t *testing.T) {
 	})
 
 	var err error
-	inSafeRunCh := make(chan interface{})
+	inLockedInitCh := make(chan interface{})
 	shutdownCalled := make(chan interface{})
 
 	go func() {
-		err = s.SafeRun(func() error {
-			close(inSafeRunCh)
+		err = s.LockedInit(func() error {
+			close(inLockedInitCh)
 			select {
 			case <-shutdownCalled:
-				t.Errorf("Shutdown was called and completed while in SafeRun")
+				t.Errorf("Shutdown was called and completed while in LockedInit")
 			case <-time.After(50 * time.Millisecond):
 				return nil
 			}
@@ -91,7 +91,7 @@ func TestShutdownDuringSafeRun(t *testing.T) {
 		})
 	}()
 
-	<-inSafeRunCh
+	<-inLockedInitCh
 	go func() {
 		s.Shutdown(nil)
 		close(shutdownCalled)
