@@ -8,6 +8,45 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+
+func TestShutterTerminating(t *testing.T) {
+	a := 0
+	s := NewWithCallback(func(_ error) {
+		time.Sleep(10*time.Millisecond)
+		a++
+	})
+	go func() {
+		select {
+		case <-s.Terminating():
+			assert.Equal(t, 0, a)
+		case <-s.Terminated():
+			assert.Equal(t, 1, a)
+
+		case <-time.After(50 * time.Millisecond):
+			t.Errorf("terminating channel was not closed as expected")
+		}
+	}()
+	s.Shutdown(nil)
+}
+
+func TestShutterTerminated(t *testing.T) {
+	a := 0
+	s := NewWithCallback(func(_ error) {
+		time.Sleep(10*time.Millisecond)
+		a++
+	})
+	go func() {
+		select {
+		case <-s.Terminated():
+			assert.Equal(t, 1, a)
+		case <-time.After(50 * time.Millisecond):
+			t.Errorf("terminating channel was not closed as expected")
+		}
+	}()
+	s.Shutdown(nil)
+}
+
+
 func TestShutterDeadlock(t *testing.T) {
 	obj := struct {
 		*Shutter

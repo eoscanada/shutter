@@ -7,7 +7,11 @@ import (
 
 type Shutter struct {
 	lock     sync.Mutex // shutdown lock
-	ch       chan struct{}
+
+	terminatingCh chan struct{}
+	terminatedCh chan struct{}
+
+	//ch       chan struct{}
 	err      error
 	once     sync.Once
 	calls    []func(error)
@@ -16,14 +20,18 @@ type Shutter struct {
 
 func New() *Shutter {
 	s := &Shutter{
-		ch: make(chan struct{}),
+		terminatingCh: make(chan struct{}),
+		terminatedCh:make(chan struct{}),
+		//ch: make(chan struct{}),
 	}
 	return s
 }
 
 func NewWithCallback(f func(error)) *Shutter {
 	s := &Shutter{
-		ch: make(chan struct{}),
+		terminatingCh: make(chan struct{}),
+		terminatedCh:make(chan struct{}),
+		//ch: make(chan struct{}),
 	}
 	s.OnShutdown(f)
 	return s
@@ -42,7 +50,7 @@ var ErrShutterWasAlreadyDown = errors.New("saferun was called on an already-shut
 func (s *Shutter) SafeRun(fn func() error) (err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	if s.IsDown() {
+	if s.IsTerminating() {
 		return ErrShutterWasAlreadyDown
 	}
 	return fn()
@@ -62,7 +70,7 @@ func (s *Shutter) Shutdown(err error) {
 	// assign s.err before closing channel, so `IsDown()` and `Done()`
 	// return when `Err()` is *always* available.
 	s.err = err
-	close(s.ch)
+	close(s.terminatingCh)
 	s.lock.Unlock()
 
 	s.callLock.Lock()
@@ -70,15 +78,33 @@ func (s *Shutter) Shutdown(err error) {
 		call(err)
 	}
 	s.callLock.Unlock()
+
+	s.lock.Lock()
+	// the err has been handle above thus it will be available
+	close(s.terminatedCh)
+	s.lock.Unlock()
 }
 
-func (s *Shutter) Done() <-chan struct{} {
-	return s.ch
+func (s *Shutter) Terminating() <-chan struct{} {
+	return s.terminatingCh
 }
 
-func (s *Shutter) IsDown() bool {
+func (s *Shutter) IsTerminating() bool {
 	select {
-	case <-s.ch:
+	case <-s.terminatingCh:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Shutter) Terminated() <-chan struct{} {
+	return s.terminatedCh
+}
+
+func (s *Shutter) IsTerminated() bool {
+	select {
+	case <-s.terminatedCh:
 		return true
 	default:
 		return false
